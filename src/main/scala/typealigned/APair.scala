@@ -1,6 +1,6 @@
 package typealigned
 
-import scala.language.higherKinds
+
 
 /**
  * Type-aligned pair. Isomorphic to

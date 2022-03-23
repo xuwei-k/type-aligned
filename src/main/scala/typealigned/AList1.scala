@@ -1,9 +1,6 @@
 package typealigned
 
 import scala.annotation.tailrec
-import scala.language.higherKinds
-import scalaz.{Compose, Leibniz}
-
 
 /**
  * Type-aligned list with at least 1 element.
@@ -19,17 +16,17 @@ sealed abstract class AList1[F[_, _], A, B] {
   def ::[Z](fza: F[Z, A]): AList1[F, Z, B] =
     ACons(fza, this)
 
-  def uncons: Either[F[A, B], APair[F[A, ?], AList1[F, ?, B]]] =
+  def uncons: Either[F[A, B], APair[F[A, *], AList1[F, *, B]]] =
     this match {
       case AJust(f) => Left(f)
-      case ACons(h, t) => Right(APair.of[F[A, ?], AList1[F, ?, B]](h, t))
+      case ACons(h, t) => Right(APair.of[F[A, *], AList1[F, *, B]](h, t))
     }
 
   def :::[Z](that: AList1[F, Z, A]): AList1[F, Z, B] = {
     @inline def pair[X](rev: Composed1[F, Z, X], fs: AList1[F, X, B]) =
-      APair[Composed1[F, Z, ?], AList1[F, ?, B], X](rev, fs)
+      APair[Composed1[F, Z, *], AList1[F, *, B], X](rev, fs)
 
-    @tailrec def go(p: APair[Composed1[F, Z, ?], AList1[F, ?, B]]): AList1[F, Z, B] = {
+    @tailrec def go(p: APair[Composed1[F, Z, *], AList1[F, *, B]]): AList1[F, Z, B] = {
       val (rev, fs) = (p._1, p._2)
       rev.uncons match {
         case Left(f) => f :: fs
@@ -41,7 +38,7 @@ sealed abstract class AList1[F[_, _], A, B] {
 
   def :::[Z](that: AList[F, Z, A]): AList1[F, Z, B] =
     that match {
-      case ANil(ev) => Leibniz.symm[Nothing, Any, Z, A](ev).subst[AList1[F, ?, B]](this)
+      case ANil(ev) => ev.flip.substituteCo[AList1[F, *, B]](this)
       case ASome(list) => list ::: this
     }
 
@@ -50,9 +47,9 @@ sealed abstract class AList1[F[_, _], A, B] {
 
   def reverse: Composed1[F, A, B] = {
     @inline def pair[X](acc: Composed1[F, A, X], fs: AList1[F, X, B]) =
-      APair[Composed1[F, A, ?], AList1[F, ?, B], X](acc, fs)
+      APair[Composed1[F, A, *], AList1[F, *, B], X](acc, fs)
 
-    @tailrec def go(p: APair[Composed1[F, A, ?], AList1[F, ?, B]]): Composed1[F, A, B] = {
+    @tailrec def go(p: APair[Composed1[F, A, *], AList1[F, *, B]]): Composed1[F, A, B] = {
       val (acc, fs) = (p._1, p._2)
       fs match {
         case AJust(f) => f :: acc
@@ -68,9 +65,9 @@ sealed abstract class AList1[F[_, _], A, B] {
 
   def foldLeft[G[_]](ga: G[A])(implicit G: FunctorLike[G, F]): G[B] = {
     @inline def pair[X](gx: G[X], fb: AList1[F, X, B]) =
-      APair[G, AList1[F, ?, B], X](gx, fb)
+      APair[G, AList1[F, *, B], X](gx, fb)
 
-    @tailrec def go(p: APair[G, AList1[F, ?, B]]): G[B] = {
+    @tailrec def go(p: APair[G, AList1[F, *, B]]): G[B] = {
       val (gx, fs) = (p._1, p._2)
       fs match {
         case AJust(f) => G.map(gx)(f)
@@ -87,7 +84,7 @@ sealed abstract class AList1[F[_, _], A, B] {
   def reduceLeft(implicit F: Compose[F]): F[A, B] =
     this match {
       case AJust(f) => f
-      case ACons(h, t) => t.foldLeft[F[A, ?]](h)
+      case ACons(h, t) => t.foldLeft[F[A, *]](h)
     }
 
   /**
@@ -95,7 +92,7 @@ sealed abstract class AList1[F[_, _], A, B] {
    */
   def reduce(implicit F: Compose[F]): F[A, B] =
     this match {
-      case ACons(f, g) => g.foldLeft[LBinary[F, A, ?]](LBinary(f)).extractL
+      case ACons(f, g) => g.foldLeft[LBinary[F, A, *]](LBinary(f)).extractL
       case AJust(f) => f
     }
 }
@@ -127,8 +124,8 @@ object AList1 {
    * The first list has type `AList1[=>, A, E]`, while
    * the reversed list has type `Composed1[=>, A, E]`.
    */
-  type Composed1[F[_, _], A, B] = AList1[Op[F, ?, ?], B, A]
+  type Composed1[F[_, _], A, B] = AList1[Op[F, *, *], B, A]
 
   def apply[F[_, _], A, B](f: F[A, B]): AList1[F, A, B] = AJust(f)
-  def op[F[_, _], A, B](f: F[A, B]): Composed1[F, A, B] = apply[Op[F, ?, ?], B, A](f)
+  def op[F[_, _], A, B](f: F[A, B]): Composed1[F, A, B] = apply[Op[F, *, *], B, A](f)
 }
